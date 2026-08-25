@@ -1,50 +1,66 @@
 package services;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 
 public class AIService {
 
-    // הטוקן שהתקבל מהמרצה
-    private static final String API_KEY = "F96LhZpGkMkI4pKflpD2vRmrkudCvmBEJHA3VMA8ai0uEuQNNLQwYo21TAvQ3Z3g";
-
-    // במידה והמרצה סיפק כתובת Proxy ייעודית של המכללה/אוניברסיטה, יש להחליף את הכתובת כאן
-    private static final String API_URL = "https://api.openai.com/v1/chat/completions";
+    private static final String API_TOKEN = "F96LhZpGkMkI4pKflpD2vRmrkudCvmBEJHA3VMA8ai0uEuQNNLQwYo21TAvQ3Z3g";
+    private static final String BASE_URL = "[https://shaitest-production-3066.up.railway.app/api-request](https://shaitest-production-3066.up.railway.app/api-request)";
 
     public String generateSurvey(String topic) {
         try {
             HttpClient client = HttpClient.newHttpClient();
 
-            String prompt = "צור סקר בפורמט JSON בלבד עבור הנושא: " + topic + ". "
-                    + "הסקר כולל 3 שאלות, ולכל שאלה 4 תשובות. "
-                    + "המבנה חייב להיות בדיוק: {\"topic\":\"" + topic + "\",\"questions\":[{\"id\":1,\"text\":\"...\",\"options\":[\"...\"]}]}";
+            String prompt = "Return ONLY valid raw JSON with no Markdown, no code blocks, no intro text. Topic: " + topic + ". "
+                    + "Create 3 questions, 4 options each. Format MUST be strictly: {\"topic\":\"" + topic + "\",\"questions\":[{\"id\":1,\"text\":\"...\",\"options\":[\"...\"]}]}";
 
-            String jsonPayload = "{"
-                    + "\"model\": \"gpt-3.5-turbo\","
-                    + "\"messages\": [{\"role\": \"user\", \"content\": \"" + prompt.replace("\"", "\\\"") + "\"}]"
-                    + "}";
+            String encodedPrompt = URLEncoder.encode(prompt, StandardCharsets.UTF_8);
+            String requestUrl = BASE_URL + "?token=" + API_TOKEN + "&text=" + encodedPrompt;
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(API_URL))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + API_KEY)
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .uri(URI.create(requestUrl))
+                    .GET()
                     .build();
 
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 200) {
-                // החזרת התשובה המתקבלת מהשרת
-                return response.body();
+                String rawResponse = response.body();
+                System.out.println("=== תשובת ה-AI להתקבל מהשרת ===");
+                System.out.println(rawResponse);
+
+                // ניקוי וחילוץ תבנית ה-JSON
+                return extractJson(rawResponse);
             }
         } catch (Exception e) {
-            System.err.println("שגיאה בפנייה ל-API, עובר למצב גיבוי (Mock): " + e.getMessage());
+            System.err.println("שגיאה בפנייה לשרת המרצה, עובר למצב גיבוי: " + e.getMessage());
         }
 
-        // גיבוי למקרה של שגיאת תקשורת או מפתח לא פעיל
         return getMockResponse(topic);
+    }
+
+    private String extractJson(String text) {
+        if (text == null || text.isBlank()) return getMockResponse("");
+
+        // הסרת תגיות עיצוב של Markdown
+        String cleaned = text.replaceAll("```json", "")
+                .replaceAll("```", "")
+                .trim();
+
+        // חילוץ המקטע שבין הסוגריים המסולסלים בלבד
+        int firstBrace = cleaned.indexOf('{');
+        int lastBrace = cleaned.lastIndexOf('}');
+
+        if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
+            return cleaned.substring(firstBrace, lastBrace + 1);
+        }
+
+        return cleaned;
     }
 
     private String getMockResponse(String topic) {

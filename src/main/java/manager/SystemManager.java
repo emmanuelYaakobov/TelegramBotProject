@@ -64,7 +64,7 @@ public class SystemManager {
             return false;
         }
 
-        if (community.size() < 3) {
+        if (community.size() <3 ) {
             return false;
         }
 
